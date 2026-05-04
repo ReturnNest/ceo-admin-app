@@ -3,16 +3,10 @@ import {
     X,
     User,
     Phone,
-    Mail,
-    MapPin,
-    Briefcase,
-    Calendar,
-    Globe,
     Shield,
     Heart,
     CreditCard,
     TrendingUp,
-    Clock,
     ChevronRight
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
@@ -105,7 +99,7 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, investme
                 { label: 'Occupation', value: user.occupation },
                 { label: 'Position', value: user.position },
                 { label: 'KYC Status', value: user.kyc_status, isBadge: true },
-            ]
+            ] as { label: string; value: string | undefined | null; isBadge?: boolean }[]
         },
         {
             title: 'Next of Kin',

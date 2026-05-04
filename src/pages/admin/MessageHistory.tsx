@@ -6,8 +6,7 @@ import {
     User,
     Clock,
     ChevronRight,
-    Send,
-    Filter
+    Send
 } from 'lucide-react';
 import { supabase } from '../../services/supabase';
 import { clsx, type ClassValue } from 'clsx';
