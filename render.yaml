@@ -1,0 +1,22 @@
+services:
+  # Frontend Static Site for CEO Admin App
+  - type: static
+    name: ceo-admin-app
+    env: static
+    plan: free
+    region: ohio
+    buildCommand: npm install && npm run build
+    publishPath: dist
+    headers:
+      - path: /*
+        name: Cache-Control
+        value: max-age=31536000
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_SUPABASE_URL
+        fromValue: https://bjxpanpgrffwohtigkic.supabase.co
+      - key: VITE_SUPABASE_ANON_KEY
+        fromValue: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJqeHBhbnBncmZmd29odGlna2ljIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQyNzkzODcsImV4cCI6MjA3OTg1NTM4N30._86nwqk8WLq0gH9ENzYohKC4j3sAtEmI6KooFP4hEOE
