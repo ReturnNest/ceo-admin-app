@@ -6,8 +6,10 @@ import {
     Phone, 
     Search,
     ChevronRight,
-    ClipboardList
+    ClipboardList,
+    Edit
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { supabase } from '../../services/supabase';
 
 interface PrivateListing {
@@ -133,9 +135,12 @@ export const AdminPrivateListings: React.FC = () => {
                                 <span className="text-[10px] text-slate-600 uppercase font-bold tracking-widest">
                                     Created {new Date(listing.created_at).toLocaleDateString()}
                                 </span>
-                                <button className="flex items-center gap-1 text-xs font-bold text-purple-400 hover:text-purple-300">
-                                    Details <ChevronRight className="h-4 w-4" />
-                                </button>
+                                <Link 
+                                    to={`/admin/create-listing?id=${listing.id}`}
+                                    className="flex items-center gap-1 text-xs font-bold text-purple-400 hover:text-purple-300 px-3 py-1.5 bg-purple-400/10 rounded-lg transition-colors"
+                                >
+                                    <Edit className="h-3 w-3" /> Edit <ChevronRight className="h-4 w-4" />
+                                </Link>
                             </div>
                         </div>
                     ))}

@@ -7,7 +7,8 @@ import {
     Search,
     Building2,
     Map as MapIcon,
-    Sprout
+    Sprout,
+    Edit
 } from 'lucide-react';
 import { supabase } from '../../services/supabase';
 import { ListingDetailModal } from '../../components/admin/ListingDetailModal';
@@ -223,6 +224,13 @@ export const ListingModeration: React.FC = () => {
                                                     className="p-2 text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-all"
                                                 >
                                                     <CheckCircle className="h-4 w-4" />
+                                                </button>
+                                                <button
+                                                    onClick={() => window.location.href = `/admin/create-listing?id=${item.id}`}
+                                                    title="Edit Listing"
+                                                    className="p-2 text-slate-400 hover:text-blue-400 hover:bg-blue-500/10 rounded-lg transition-all"
+                                                >
+                                                    <Edit className="h-4 w-4" />
                                                 </button>
                                                 <button
                                                     onClick={() => handleAction(item.id, 'delete')}

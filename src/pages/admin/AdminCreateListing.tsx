@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { supabase } from '../../services/supabase';
 import {
     Upload,
@@ -17,10 +18,16 @@ function cn(...inputs: any[]) {
 type ListingType = 'Real Estate' | 'Land' | 'Agriculture' | 'Houses' | 'Apartments' | 'Shortlet' | 'Science' | 'Arts' | 'Startups' | 'Commercial';
 
 export const AdminCreateListing: React.FC = () => {
+    const [searchParams] = useSearchParams();
+    const editId = searchParams.get('id');
+    const isEdit = !!editId;
+
     const [formData, setFormData] = useState({
         title: '',
         valuation: '',
-        minInvestment: '1000', // Default 1000
+        valuation_ngn: '',
+        minInvestment: '1000',
+        minInvestment_ngn: '',
         location: '',
         description: '',
         realEstateName: '',
@@ -30,10 +37,51 @@ export const AdminCreateListing: React.FC = () => {
     });
     const [type, setType] = useState<ListingType>('Real Estate');
     const [images, setImages] = useState<File[]>([]);
+    const [existingImages, setExistingImages] = useState<string[]>([]);
     const [previews, setPreviews] = useState<string[]>([]);
     const [loading, setLoading] = useState(false);
     const [success, setSuccess] = useState(false);
 
+    useEffect(() => {
+        if (isEdit) {
+            fetchListingForEdit();
+        }
+    }, [editId]);
+
+    const fetchListingForEdit = async () => {
+        setLoading(true);
+        try {
+            const { data, error } = await supabase
+                .from('listings')
+                .select('*')
+                .eq('id', editId)
+                .single();
+
+            if (error) throw error;
+            if (data) {
+                setFormData({
+                    title: data.title || '',
+                    valuation: data.valuation?.toString() || '',
+                    valuation_ngn: data.price_ngn?.toString() || '',
+                    minInvestment: data.min_investment?.toString() || '1000',
+                    minInvestment_ngn: data.min_investment_ngn?.toString() || '',
+                    location: data.location || '',
+                    description: data.description || '',
+                    realEstateName: data.real_estate_name || '',
+                    realEstateContact: data.real_estate_contact || '',
+                    realEstateAgent: data.real_estate_agent || '',
+                    internalNotes: data.internal_notes || ''
+                });
+                setType(data.type as ListingType || 'Real Estate');
+                setExistingImages(data.images || []);
+            }
+        } catch (err) {
+            console.error('Error fetching listing:', err);
+            alert('Failed to load listing for editing.');
+        } finally {
+            setLoading(false);
+        }
+    };
 
     const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files) {
@@ -45,15 +93,19 @@ export const AdminCreateListing: React.FC = () => {
         }
     };
 
-    const removeImage = (index: number) => {
-        const newImages = [...images];
-        newImages.splice(index, 1);
-        setImages(newImages);
+    const removeImage = (index: number, isExisting: boolean = false) => {
+        if (isExisting) {
+            setExistingImages(prev => prev.filter((_, i) => i !== index));
+        } else {
+            const newImages = [...images];
+            newImages.splice(index, 1);
+            setImages(newImages);
 
-        const newPreviews = [...previews];
-        URL.revokeObjectURL(newPreviews[index]);
-        newPreviews.splice(index, 1);
-        setPreviews(newPreviews);
+            const newPreviews = [...previews];
+            URL.revokeObjectURL(newPreviews[index]);
+            newPreviews.splice(index, 1);
+            setPreviews(newPreviews);
+        }
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -83,7 +135,6 @@ export const AdminCreateListing: React.FC = () => {
                     console.error('Upload error details:', uploadError);
                     throw new Error(`Failed to upload media: ${uploadError.message}`);
                 }
-                console.log('Successfully uploaded image:', fileName);
 
                 // Get public URL
                 const { data: { publicUrl } } = supabase.storage
@@ -93,63 +144,106 @@ export const AdminCreateListing: React.FC = () => {
                 imageUrls.push(publicUrl);
             }
 
-            // Use RPC
+            const finalImages = [...existingImages, ...imageUrls];
+
+            // Use RPC for create or direct update for edit
             const numericValuation = parseFloat(formData.valuation) || 0;
             const numericMinInvestment = parseFloat(formData.minInvestment) || 1000;
+            const numericValuationNgn = parseFloat(formData.valuation_ngn) || 0;
+            const numericMinInvestmentNgn = parseFloat(formData.minInvestment_ngn) || 0;
 
-            console.log('Calling create_listing RPC with:', {
-                p_title: formData.title,
-                p_type: type
-            });
+            if (isEdit) {
+                const { error: updateError } = await supabase
+                    .from('listings')
+                    .update({
+                        title: formData.title,
+                        type: type,
+                        category: type,
+                        valuation: numericValuation,
+                        price: numericValuation,
+                        price_ngn: numericValuationNgn,
+                        location: formData.location,
+                        address: formData.location,
+                        description: formData.description,
+                        target_amount: numericValuation,
+                        min_investment: numericMinInvestment,
+                        min_investment_ngn: numericMinInvestmentNgn,
+                        images: finalImages,
+                        real_estate_name: formData.realEstateName,
+                        real_estate_contact: formData.realEstateContact,
+                        real_estate_agent: formData.realEstateAgent,
+                        internal_notes: formData.internalNotes
+                    })
+                    .eq('id', editId);
 
-            const { error } = await supabase.rpc('create_listing', {
-                p_title: formData.title,
-                p_type: type, // Match Marketplace case exactly
-                p_valuation: numericValuation,
-                p_location: formData.location,
-                p_address: formData.location,
-                p_description: formData.description,
-                p_seller_id: user.id,
-                p_target_amount: numericValuation,
-                p_min_investment: numericMinInvestment,
-                p_images: imageUrls,
-                p_status: 'active',
-                p_real_estate_name: formData.realEstateName,
-                p_real_estate_contact: formData.realEstateContact,
-                p_real_estate_agent: formData.realEstateAgent,
-                p_internal_notes: formData.internalNotes
-            });
+                if (updateError) throw updateError;
+                
+                // Mirror to properties if it exists
+                await supabase.from('properties').update({
+                    title: formData.title,
+                    type: type,
+                    valuation: numericValuation,
+                    price_ngn: numericValuationNgn,
+                    description: formData.description,
+                    images: finalImages
+                }).eq('id', editId);
 
-            if (error) throw error;
+            } else {
+                const { error } = await supabase.rpc('create_listing', {
+                    p_title: formData.title,
+                    p_type: type, 
+                    p_valuation: numericValuation,
+                    p_location: formData.location,
+                    p_address: formData.location,
+                    p_description: formData.description,
+                    p_seller_id: user.id,
+                    p_target_amount: numericValuation,
+                    p_min_investment: numericMinInvestment,
+                    p_images: finalImages,
+                    p_status: 'active',
+                    p_real_estate_name: formData.realEstateName,
+                    p_real_estate_contact: formData.realEstateContact,
+                    p_real_estate_agent: formData.realEstateAgent,
+                    p_internal_notes: formData.internalNotes,
+                    p_price_ngn: numericValuationNgn,
+                    p_min_investment_ngn: numericMinInvestmentNgn
+                });
 
-            console.log('Listing created successfully!');
+                if (error) throw error;
+            }
+
+            console.log(isEdit ? 'Listing updated!' : 'Listing created!');
             setSuccess(true);
             
-            // Reset form
-            setFormData({ 
-                title: '', 
-                valuation: '', 
-                minInvestment: '1000', 
-                location: '', 
-                description: '',
-                realEstateName: '',
-                realEstateContact: '',
-                realEstateAgent: '',
-                internalNotes: ''
-            });
-            setImages([]);
-            setPreviews([]);
-            setType('Real Estate');
+            // Reset form if not edit
+            if (!isEdit) {
+                setFormData({ 
+                    title: '', 
+                    valuation: '', 
+                    valuation_ngn: '',
+                    minInvestment: '1000', 
+                    minInvestment_ngn: '',
+                    location: '', 
+                    description: '',
+                    realEstateName: '',
+                    realEstateContact: '',
+                    realEstateAgent: '',
+                    internalNotes: ''
+                });
+                setImages([]);
+                setPreviews([]);
+                setExistingImages([]);
+                setType('Real Estate');
+            }
 
             // Redirect after delay
             setTimeout(() => {
-                window.location.href = '/admin/private-records';
+                window.location.href = isEdit ? '/admin/moderation' : '/admin/private-records';
             }, 2000);
 
         } catch (err: any) {
-            console.error('Error creating listing full detail:', err);
-            const errorMessage = err.message || JSON.stringify(err);
-            alert(`Failed to create listing: ${errorMessage}\n\nMake sure you have run the latest SQL migrations (including 20260504_cross_app_sync.sql) in Supabase!`);
+            console.error('Error saving listing:', err);
+            alert(`Failed to save listing: ${err.message || JSON.stringify(err)}`);
         } finally {
             setLoading(false);
         }
@@ -163,16 +257,16 @@ export const AdminCreateListing: React.FC = () => {
                         <ShieldCheck className="h-8 w-8 text-emerald-400" />
                     </div>
                     <div>
-                        <h3 className="text-xl font-bold text-white">Listing Deployed Successfully!</h3>
-                        <p className="text-emerald-400/80">The project is now live. Redirecting to private records...</p>
+                        <h3 className="text-xl font-bold text-white">{isEdit ? 'Listing Updates Saved!' : 'Listing Deployed Successfully!'}</h3>
+                        <p className="text-emerald-400/80">{isEdit ? 'Changes are now live.' : 'The project is now live.'} Redirecting...</p>
                     </div>
                 </div>
             )}
 
             <div className="flex items-center justify-between">
                 <div>
-                    <h2 className="text-3xl font-bold text-white">Create New Offering</h2>
-                    <p className="text-slate-400 mt-1">Deploy a new investment project to the marketplace.</p>
+                    <h2 className="text-3xl font-bold text-white">{isEdit ? 'Edit Offering' : 'Create New Offering'}</h2>
+                    <p className="text-slate-400 mt-1">{isEdit ? `Modifying listing ID: ${editId}` : 'Deploy a new investment project to the marketplace.'}</p>
                 </div>
                 <div className="flex flex-wrap bg-slate-900 p-1 rounded-xl border border-slate-800 gap-1">
                     {(['Real Estate', 'Land', 'Agriculture', 'Houses', 'Apartments', 'Shortlet', 'Science', 'Arts', 'Startups', 'Commercial'] as ListingType[]).map((t) => (
@@ -228,7 +322,20 @@ export const AdminCreateListing: React.FC = () => {
                             </div>
                         </div>
                         <div className="space-y-2">
-                            <label className="text-sm font-medium text-slate-400">Minimum Investment (Entry Price)</label>
+                            <label className="text-sm font-medium text-slate-400">Total Valuation (NGN ₦)</label>
+                            <div className="relative">
+                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 font-bold">₦</span>
+                                <input
+                                    type="number"
+                                    value={formData.valuation_ngn}
+                                    onChange={e => setFormData({ ...formData, valuation_ngn: e.target.value })}
+                                    placeholder="0.00"
+                                    className="w-full pl-11 pr-4 py-3 bg-slate-800 border border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/50 text-white"
+                                />
+                            </div>
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium text-slate-400">Min. Investment (USD)</label>
                             <div className="relative">
                                 <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
                                 <input
@@ -238,6 +345,19 @@ export const AdminCreateListing: React.FC = () => {
                                     onChange={e => setFormData({ ...formData, minInvestment: e.target.value })}
                                     placeholder="1000"
                                     className="w-full pl-11 pr-4 py-3 bg-slate-800 border border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-white"
+                                />
+                            </div>
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium text-slate-400">Min. Investment (NGN ₦)</label>
+                            <div className="relative">
+                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 font-bold">₦</span>
+                                <input
+                                    type="number"
+                                    value={formData.minInvestment_ngn}
+                                    onChange={e => setFormData({ ...formData, minInvestment_ngn: e.target.value })}
+                                    placeholder="0.00"
+                                    className="w-full pl-11 pr-4 py-3 bg-slate-800 border border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/50 text-white"
                                 />
                             </div>
                         </div>
@@ -334,13 +454,27 @@ export const AdminCreateListing: React.FC = () => {
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        {existingImages.map((src, i) => (
+                            <div key={`existing-${i}`} className="relative aspect-square rounded-xl overflow-hidden group bg-black border border-blue-500/30">
+                                <img src={src} className="h-full w-full object-cover" alt="existing" />
+                                <div className="absolute top-2 left-2 px-1.5 py-0.5 bg-blue-600 text-[8px] text-white rounded font-bold uppercase tracking-wider">Live</div>
+                                <button
+                                    type="button"
+                                    onClick={() => removeImage(i, true)}
+                                    className="absolute top-2 right-2 p-1.5 bg-black/50 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                                >
+                                    <X className="h-4 w-4" />
+                                </button>
+                            </div>
+                        ))}
                         {previews.map((src, i) => (
-                            <div key={i} className="relative aspect-square rounded-xl overflow-hidden group bg-black">
+                            <div key={`new-${i}`} className="relative aspect-square rounded-xl overflow-hidden group bg-black border border-emerald-500/30">
                                 {images[i]?.type.startsWith('video/') ? (
                                     <video src={src} className="h-full w-full object-cover" controls />
                                 ) : (
                                     <img src={src} className="h-full w-full object-cover" alt="preview" />
                                 )}
+                                <div className="absolute top-2 left-2 px-1.5 py-0.5 bg-emerald-600 text-[8px] text-white rounded font-bold uppercase tracking-wider">New</div>
                                 <button
                                     type="button"
                                     onClick={() => removeImage(i)}
@@ -362,9 +496,12 @@ export const AdminCreateListing: React.FC = () => {
                     <button
                         type="submit"
                         disabled={loading}
-                        className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold py-4 rounded-2xl shadow-lg shadow-blue-500/20 transition-all active:scale-95"
+                        className={cn(
+                            "flex-1 font-bold py-4 rounded-2xl shadow-lg transition-all active:scale-95",
+                            isEdit ? "bg-purple-600 hover:bg-purple-500 shadow-purple-500/20" : "bg-blue-600 hover:bg-blue-500 shadow-blue-500/20"
+                        )}
                     >
-                        {loading ? 'Deploying...' : 'Deploy Project to Marketplace'}
+                        {loading ? 'Processing...' : isEdit ? 'Update Live Project' : 'Deploy Project to Marketplace'}
                     </button>
                     <button
                         type="button"
@@ -372,7 +509,9 @@ export const AdminCreateListing: React.FC = () => {
                             setFormData({ 
                                 title: '', 
                                 valuation: '', 
+                                valuation_ngn: '',
                                 minInvestment: '1000', 
+                                minInvestment_ngn: '',
                                 location: '', 
                                 description: '',
                                 realEstateName: '',
